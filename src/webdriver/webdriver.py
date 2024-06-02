@@ -1,4 +1,4 @@
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 from src.configs.logging.logging_config import setup_logging
 import locale
 from tzlocal import get_localzone_name
@@ -30,7 +30,7 @@ class WebDriver:
     __instance = None
 
     @staticmethod
-    def getInstance(*args, **kwargs):
+    async def getInstance(*args, **kwargs):
         """
         Returns the singleton instance of the WebDriver class.
 
@@ -45,7 +45,7 @@ class WebDriver:
             WebDriver.__instance = WebDriver(*args, **kwargs)
         return WebDriver.__instance
 
-    def __init__(self, *args, **kwargs):
+    async def __init__(self, *args, **kwargs):
         """
         Initializes the WebDriver class.
 
@@ -60,9 +60,9 @@ class WebDriver:
             raise Exception("This class is a singleton!")
         else:
             WebDriver.__instance = self
-            self.createDriver(*args, **kwargs)
+            await self.createDriver(*args, **kwargs)
 
-    def createDriver(self, *args, **kwargs):
+    async def createDriver(self, *args, **kwargs):
         """
         Creates a new browser instance and sets up the page.
 
@@ -77,25 +77,25 @@ class WebDriver:
         system_locale = locale.getdefaultlocale()
 
         try:
-            playwright = sync_playwright().start()
-            browser = playwright.chromium.launch_persistent_context(
-                user_data_dir="src/data/chrome_profile",
-                headless=False,
-                args=[
-                    "--disable-gpu",
-                    "--disable-dev-shm-usage",
-                    "--no-sandbox",
-                    "--disable-web-security",
-                    "--allow-running-insecure-content",
-                ],
-                locale=system_locale[0],
-                timezone_id=timezone_id,
-            )
-            self.playwright = playwright
-            self.browser = browser
-            self.page = browser.new_page()
-            self.page.set_viewport_size({"width": 960, "height": 1080})
-            logger.info("Browser instance created successfully.")
+            async with async_playwright() as playwright:
+                browser = await playwright.chromium.launch_persistent_context(
+                    user_data_dir="src/data/chrome_profile",
+                    headless=False,
+                    args=[
+                        "--disable-gpu",
+                        "--disable-dev-shm-usage",
+                        "--no-sandbox",
+                        "--disable-web-security",
+                        "--allow-running-insecure-content",
+                    ],
+                    locale=system_locale[0],
+                    timezone_id=timezone_id,
+                )
+                self.playwright = playwright
+                self.browser = browser
+                self.page = await browser.new_page()
+                await self.page.set_viewport_size({"width": 960, "height": 1080})
+                logger.info("Browser instance created successfully.")
         except Exception as e:
             logger.error("Failed to create browser instance.", exc_info=True)
             raise e
@@ -112,7 +112,7 @@ class WebDriver:
         """
         return self.page
 
-    def closeDriver(self):
+    async def closeDriver(self):
         """
         Closes the browser instance and stops Playwright.
 
@@ -123,14 +123,14 @@ class WebDriver:
             None
         """
         try:
-            self.browser.close()
-            self.playwright.stop()
+            await self.browser.close()
+            await self.playwright.stop()
             logger.info("Browser instance closed successfully.")
         except Exception as e:
             logger.error("Failed to close browser instance.", exc_info=True)
             raise e
 
-    def closeCurrentTab(self):
+    async def closeCurrentTab(self):
         """
         Closes the current tab (page) without affecting the browser instance.
 
@@ -142,9 +142,9 @@ class WebDriver:
         """
         if self.page and not self.page.is_closed():
             try:
-                self.page.close()
-                self.page = self.browser.new_page()
-                self.page.set_viewport_size({"width": 960, "height": 1080})
+                await self.page.close()
+                self.page = await self.browser.new_page()
+                await self.page.set_viewport_size({"width": 960, "height": 1080})
                 logger.info("Current tab closed successfully.")
             except Exception as e:
                 logger.error("Failed to close current tab.", exc_info=True)

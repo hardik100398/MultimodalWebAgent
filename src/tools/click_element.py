@@ -14,7 +14,7 @@ setup_logging()
 logger = logging.getLogger()
 
 
-def click_element(query: str) -> str:
+async def click_element(query: str) -> str:
     """
     Clicks on a webpage element based on a user query, and returns a response string with the result of the action.
 
@@ -25,10 +25,11 @@ def click_element(query: str) -> str:
         str: A response string providing insights and answers regarding the information presented in the active browser window.
     """
     try:
-        driver = get_webdriver_instance()
+        driver = await get_webdriver_instance()
         logger.info("Highlighting clickable elements on the page.")
         bbox_descriptions, bbox_coordinates, driver = highlight_elements(
-            driver, "click")
+            driver, "click"
+        )
         screenshot = get_b64_screenshot(driver)
         driver = highlight_elements(driver, "remove")
     except Exception as e:
@@ -37,10 +38,15 @@ def click_element(query: str) -> str:
 
     try:
         click_template = load_context("click_template")
-        enriched_query = f"{query}.\n\nText on all visible clickable elements: {bbox_descriptions}"
+        enriched_query = (
+            f"{query}.\n\nText on all visible clickable elements: {bbox_descriptions}"
+        )
         message_history = get_vision_template(
-            click_template, screenshot, enriched_query)
-        return process_click(driver, message_history, bbox_coordinates, bbox_descriptions)
+            click_template, screenshot, enriched_query
+        )
+        return process_click(
+            driver, message_history, bbox_coordinates, bbox_descriptions
+        )
     except Exception as e:
         logger.error("Error processing click action: %s", e, exc_info=True)
         return "Failed to process click action. Please check the logs for more details."
@@ -65,7 +71,7 @@ def process_click(driver, message_history, bbox_coordinates, bbox_descriptions) 
             message = analyze_image(message_history)
             if "none" in message.lower():
                 return "No element found matching the description."
-            element_index = int(''.join(filter(str.isdigit, message)))
+            element_index = int("".join(filter(str.isdigit, message)))
             bbox = bbox_coordinates[element_index]
             return click_field(driver, bbox, bbox_descriptions, element_index)
         except Exception as e:

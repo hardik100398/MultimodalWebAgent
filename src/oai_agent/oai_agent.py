@@ -18,6 +18,7 @@ import autogen
 from autogen.agentchat import AssistantAgent
 from autogen.agentchat.contrib.gpt_assistant_agent import GPTAssistantAgent
 
+from autogen.cache import Cache
 import openai
 
 setup_logging()
@@ -39,9 +40,13 @@ def configure_agent(assistant_type: str) -> GPTAssistantAgent:
         assistant_id = load_assistant_id(assistant_type)
         llm_config = GetConfig().config_list
         oai_config = {
-            "config_list": llm_config["config_list"], "assistant_id": assistant_id}
+            "config_list": llm_config["config_list"],
+            "assistant_id": assistant_id,
+        }
         gpt_assistant = GPTAssistantAgent(
-            name=assistant_type, instructions=AssistantAgent.DEFAULT_SYSTEM_MESSAGE, llm_config=oai_config
+            name=assistant_type,
+            instructions=AssistantAgent.DEFAULT_SYSTEM_MESSAGE,
+            llm_config=oai_config,
         )
         logger.info("GPT Assistant Agent configured.")
         return gpt_assistant
@@ -52,7 +57,8 @@ def configure_agent(assistant_type: str) -> GPTAssistantAgent:
     except Exception as e:
         logger.error(f"Unexpected error during agent configuration: {str(e)}")
         raise
-    
+
+
 def register_functions(agent):
     """
     Register the functions used by the GPT Assistant Agent.
@@ -103,12 +109,16 @@ def create_user_proxy():
     return user_proxy
 
 
-def run_process(prompt):
+async def run_process(prompt):
     gpt_assistant = configure_agent("BrowsingAgent")
     register_functions(gpt_assistant)
     user_proxy = create_user_proxy()
-    user_proxy.initiate_chat(
-        gpt_assistant, message=prompt)
+    with Cache.disk() as cache:
+        return await user_proxy.a_initiate_chat(
+            gpt_assistant, message=prompt, cache=cache
+        )
+    pass
+
 
 def main():
     """

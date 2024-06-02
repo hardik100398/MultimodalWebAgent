@@ -1,82 +1,172 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Form, WebSocket
 from fastapi.responses import HTMLResponse
+from playwright.async_api import async_playwright
+import openai
+import logging
+import json
+import asyncio
 from src.oai_agent.oai_agent import run_process
-import json
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService
-from webdriver_manager.chrome import ChromeDriverManager
-import json
 
 
 app = FastAPI()
 
 
-html = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multimodal Web Agent</title>
-    <script>
-        document.addEventListener('DOMContentLoaded', (event) => {
-            const ws = new WebSocket('ws://' + location.host + '/ws');
-            
-            ws.onmessage = function(event) {
-                const message = JSON.parse(event.data);
-                document.getElementById('response').innerText = message.data;
-            };
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
 
-            document.getElementById('prompt-form').addEventListener('submit', function(e) {
-                e.preventDefault();
-                const prompt = document.getElementById('prompt-input').value;
-                ws.send(JSON.stringify({data: prompt}));
-            });
-        });
-    </script>
-</head>
-<body>
-    <div style="display: flex;">
-        <div style="width: 50%;">
-            <form id="prompt-form">
-                <input type="text" id="prompt-input" placeholder="Type your prompt here">
-                <button type="submit">Send</button>
-            </form>
-            <div id="response"></div>
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def send_message(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+
+manager = ConnectionManager()
+
+
+@app.on_event("startup")
+async def startup_event():
+    global playwright, browser, page
+    playwright = await async_playwright().start()
+    browser = await playwright.chromium.launch(headless=False)
+    page = await browser.new_page()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await page.close()
+    await browser.close()
+    await playwright.stop()
+
+
+@app.get("/", response_class=HTMLResponse)
+async def get():
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>FastAPI with WebSocket</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                display: flex;
+                height: 100vh;
+                margin: 0;
+            }
+            .sidebar {
+                width: 250px;
+                background-color: #f1f1f1;
+                padding: 15px;
+                box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            }
+            .content {
+                flex: 1;
+                padding: 15px;
+            }
+            .button {
+                display: block;
+                width: 100%;
+                padding: 10px;
+                margin: 5px 0;
+                background-color: #fff;
+                border: 1px solid #ddd;
+                text-align: left;
+                cursor: pointer;
+            }
+            iframe {
+                width: 100%;
+                height: calc(100vh - 30px);
+                border: none;
+            }
+        </style>
+        <script>
+            let socket;
+            function connectWebSocket() {
+                socket = new WebSocket("ws://localhost:8000/ws");
+                socket.onmessage = function(event) {
+                    const iframe = document.getElementById("iframeContent");
+                    iframe.srcdoc = event.data;
+                };
+            }
+
+            async function sendPrompt(prompt) {
+                const response = await fetch('/prompt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: 'prompt=' + encodeURIComponent(prompt)
+                });
+            }
+
+            window.onload = connectWebSocket;
+            function startTask() {
+            sendPrompt("TASK: Go to the Amazon website and search for a laptop, filter for laptops with more than 4 stars, select the first and put it in the cart. 1. Go to the website https://www.amazon.com using the \'read_url\'. 2. Search for \'laptop\' using the \'input_text\'. 3. Click on the more than 4 stars filter using the \'click_element\'. 4. Click on the first product using the \'click_element\'. 5. Add the item to the cart by clicking on the \'Add to Cart\' button using the \'click_element\'. Write \'TERMINATE\' to end the conversation.");
+            }
+        </script>
+    </head>
+    <body>
+        <div class="sidebar">
+            <button class="button" onclick="startTask()">Start Task</button>
         </div>
-        <div style="width: 50%;">
-            <iframe src="about:blank" id="browser-frame" style="width: 100%; height: 100vh;"></iframe>
+        <div class="content">
+            <iframe id="iframeContent" src="" title="Iframe Example"></iframe>
         </div>
-    </div>
-</body>
-</html>
-"""
+    </body>
+    </html>
+    """
+    return html_content
 
 
-@app.get("/")
-async def read_root():
-    return {"message":"Welcome to Multimodal agent API"} 
+@app.post("/prompt")
+async def handle_prompt(prompt: str = Form(...)):
+    try:
+        asyncio.create_task(run_task(prompt))
+        return {"status": "Prompt received"}
+    except Exception as e:
+        print(e)
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    while True:
-        data = await websocket.receive_text()
-        data_json = json.loads(data)
-        prompt = data_json['data']
-        # Process the prompt here
-        response = f"Processed: {prompt}"
-        await websocket.send_text(json.dumps({'data': response}))
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+    except Exception as e:
+        print(f"Connection error: {e}")
+    finally:
+        manager.disconnect(websocket)
 
-@app.post("/start_browser")
-async def start_browser(url: str):
-    options = webdriver.ChromeOptions()
-    options.add_argument('--headless')
-    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
-    driver.get(url)
-    return {"status": "browser started"}
+
+async def send_page_content():
+    content = await page.content()
+    await manager.send_message(content)
+
+
+async def run_task(prompt: str):
+    try:
+        # Use OpenAI API to process the prompt
+        response = await run_process(prompt)
+        # Parse the response to get the steps
+        steps = response.chat_history
+
+        for i in steps:
+            await send_page_content()  # Send updated content to WebSocket clients
+
+        await manager.send_message("TERMINATE")
+    except Exception as e:
+        print(e)
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -16,7 +16,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
-def input_text(query: str) -> str:
+async def input_text(query: str) -> str:
     """
     Sends keys to input fields based on a query and returns a result or error message.
 
@@ -27,10 +27,11 @@ def input_text(query: str) -> str:
         str: A response string indicating the success or failure of the input action.
     """
     try:
-        driver = get_webdriver_instance()
+        driver = await get_webdriver_instance()
         logger.info("Highlighting input elements on the page.")
         bbox_descriptions, bbox_coordinates, driver = highlight_elements(
-            driver, "input")
+            driver, "input"
+        )
         screenshot = get_b64_screenshot(driver)
         highlight_elements(driver, "remove")
     except Exception as e:
@@ -39,9 +40,12 @@ def input_text(query: str) -> str:
 
     try:
         input_template = load_context("input_template")
-        enriched_query = f"{query}.\n\nText on all visible input elements: {bbox_descriptions}"
+        enriched_query = (
+            f"{query}.\n\nText on all visible input elements: {bbox_descriptions}"
+        )
         message_history = get_vision_template(
-            input_template, screenshot, enriched_query)
+            input_template, screenshot, enriched_query
+        )
         return process_input(driver, message_history, bbox_coordinates)
     except Exception as e:
         logger.error("Error processing input action: %s", e, exc_info=True)
@@ -88,8 +92,8 @@ def extract_input_elements(message: str) -> dict:
     """
     logger.info("Extracting input elements from the message.")
     try:
-        start = message.find('```json') + len('```json\n')
-        end = message.rfind('```')
+        start = message.find("```json") + len("```json\n")
+        end = message.rfind("```")
         json_str = message[start:end].strip()
         return json.loads(json_str)
     except json.JSONDecodeError as e:

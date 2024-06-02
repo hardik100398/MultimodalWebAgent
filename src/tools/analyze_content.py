@@ -12,7 +12,7 @@ setup_logging()
 logger = logging.getLogger()
 
 
-def analyze_content(query: str) -> str:
+async def analyze_content(query: str) -> str:
     """
     Analyzes the content of a webpage based on a screenshot and a user query, and returns a response string with insights and answers.
 
@@ -24,7 +24,7 @@ def analyze_content(query: str) -> str:
     """
     try:
         logger.info("Initializing WebDriver to capture a webpage screenshot.")
-        driver = get_webdriver_instance()
+        driver = await get_webdriver_instance()
 
         screenshot_b64 = get_b64_screenshot(driver)
 
