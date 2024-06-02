@@ -47,13 +47,12 @@ def configure_agent(assistant_type: str) -> GPTAssistantAgent:
         return gpt_assistant
     except openai.NotFoundError:
         logger.warning("Assistant not found. Creating new assistant...")
-        create_agent(assistant_type)
+        assistant = create_agent(assistant_type)
         return configure_agent()
     except Exception as e:
         logger.error(f"Unexpected error during agent configuration: {str(e)}")
         raise
-
-
+    
 def register_functions(agent):
     """
     Register the functions used by the GPT Assistant Agent.
@@ -104,6 +103,13 @@ def create_user_proxy():
     return user_proxy
 
 
+def run_process(prompt):
+    gpt_assistant = configure_agent("BrowsingAgent")
+    register_functions(gpt_assistant)
+    user_proxy = create_user_proxy()
+    user_proxy.initiate_chat(
+        gpt_assistant, message=prompt)
+
 def main():
     """
     Main function to run the GPT Assistant Agent.
@@ -115,11 +121,7 @@ def main():
         None
     """
     try:
-        gpt_assistant = configure_agent("BrowsingAgent")
-        register_functions(gpt_assistant)
-        user_proxy = create_user_proxy()
-        user_proxy.initiate_chat(
-            gpt_assistant, message=prompt)
+        run_process(prompt)
     except Exception as e:
         logger.error(f"An error occurred: {str(e)}")
 

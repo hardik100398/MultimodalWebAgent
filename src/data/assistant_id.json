@@ -43,5 +43,15 @@
         "type": "BrowsingAgent",
         "id": "asst_prAKf2fRPin7eWyotdcaEVHh",
         "date": "2024-03-14 08:00:30.929771"
+    },
+    {
+        "type": "BrowsingAgent",
+        "id": "asst_dnIupfCN8mkPcdtYtjaKGmdh",
+        "date": "2024-06-02 14:27:46.068599"
+    },
+    {
+        "type": "BrowsingAgent",
+        "id": "asst_NuOgJ95n8BftAFFMpbby9TDS",
+        "date": "2024-06-02 15:27:00.922867"
     }
 ]
